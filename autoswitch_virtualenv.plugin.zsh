@@ -254,14 +254,15 @@ function _default_venv()
 # remove project environment for current directory
 function rmvenv()
 {
+    local python_bin=${AUTOSWITCH_DEFAULT_PYTHON:-python3}
     local venv_type="$(_get_venv_type "$PWD" "unknown")"
 
     if [[ "$venv_type" == "pipenv" ]]; then
         deactivate
-        pipenv --rm
+        "${python_bin}" -m pipenv --rm
     elif [[ "$venv_type" == "poetry" ]]; then
         deactivate
-        poetry env remove "$(poetry run which python)"
+        "${python_bin}" -m poetry env remove "$(poetry run which python)"
     elif [[ "$venv_type" == "uv" ]]; then
         deactivate
         rm -rf ".venv"
@@ -313,7 +314,9 @@ function randstr()
 # helper function to create a project environment for the current directory
 function mkvenv()
 {
+    local python_bin=${AUTOSWITCH_DEFAULT_PYTHON:-python3}
     local venv_type="$(_get_venv_type "$PWD" "unknown")"
+
     # Copy parameters variable so that we can mutate it
     # NOTE: Keep declaration of variable and assignment separate for zsh 5.0 compatibility
     local params
@@ -327,9 +330,9 @@ function mkvenv()
         # TODO: detect if this is already installed
         if [[ "$AUTOSWITCH_PIPINSTALL" = "FULL" ]]
         then
-            pipenv install --dev $params
+            "${python_bin}" -m pipenv install --dev $params
         else
-            pipenv install --dev --editable . $params
+            "${python_bin}" -m pipenv install --dev --editable . $params
         fi
         _activate_pipenv
         return
@@ -339,7 +342,7 @@ function mkvenv()
             return
         fi
         # TODO: detect if this is already installed
-        poetry install $params
+        "${python_bin}" -m poetry install $params
         _activate_poetry
         return
     elif [[ "$venv_type" == "uv" ]]; then
@@ -347,7 +350,7 @@ function mkvenv()
             _missing_error_message uv
             return
         fi
-        uv sync $params
+        "${python_bin}" -m uv sync $params
         _activate_uv
         return
     else
@@ -375,9 +378,9 @@ function mkvenv()
             /bin/mkdir -p "$VIRTUAL_ENV_DIR"
 
             if [[ ${params[(I)--verbose]} -eq 0 ]]; then
-                virtualenv $params "$(_virtual_env_dir "$venv_name")"
+                "${python_bin}" -m virtualenv $params "$(_virtual_env_dir "$venv_name")"
             else
-                virtualenv $params "$(_virtual_env_dir "$venv_name")" > /dev/null
+                "${python_bin}" -m virtualenv $params "$(_virtual_env_dir "$venv_name")" > /dev/null
             fi
 
             printf "$venv_name\n" > "$AUTOSWITCH_FILE"
@@ -392,12 +395,14 @@ function mkvenv()
 
 
 function install_requirements() {
+    local python_bin=${AUTOSWITCH_DEFAULT_PYTHON:-python3}
+
     if [[ -f "$AUTOSWITCH_DEFAULT_REQUIREMENTS" ]]; then
         printf "Install default requirements? (${AUTOSWITCH_PURPLE}$AUTOSWITCH_DEFAULT_REQUIREMENTS${AUTOSWITCH_NORMAL}) [y/N]: "
         read ans
 
         if [[ "$ans" = "y" || "$ans" == "Y" ]]; then
-            pip install -r "$AUTOSWITCH_DEFAULT_REQUIREMENTS"
+            "${python_bin}" -m pip install -r "$AUTOSWITCH_DEFAULT_REQUIREMENTS"
         fi
     fi
 
@@ -408,9 +413,9 @@ function install_requirements() {
         if [[ "$ans" = "y" || "$ans" = "Y" ]]; then
             if [[ "$AUTOSWITCH_PIPINSTALL" = "FULL" ]]
             then
-                pip install .
+                "${python_bin}" -m pip install .
             else
-                pip install -e .
+                "${python_bin}" -m pip install -e .
             fi
         fi
     fi
@@ -424,7 +429,7 @@ function install_requirements() {
         read ans
 
         if [[ "$ans" = "y" || "$ans" = "Y" ]]; then
-            pip install -r "$requirements"
+            "${python_bin}" -m pip install -r "$requirements"
         fi
     done
 }
