@@ -1,4 +1,4 @@
-export AUTOSWITCH_VERSION="3.8.2"
+export AUTOSWITCH_VERSION="3.9.0"
 export AUTOSWITCH_FILE=".venv"
 
 AUTOSWITCH_RED="\e[31m"
@@ -163,6 +163,7 @@ function _activate_pipenv() {
     return 1
 }
 
+
 function _activate_uv() {
     if [[ -d ".venv" ]]; then
         _maybeworkon ".venv" "uv"
@@ -202,11 +203,11 @@ function check_venv()
             printf "Run the following command to fix this: ${AUTOSWITCH_PURPLE}\"chmod 600 $venv_path\"${AUTOSWITCH_NORMAL}\n"
         else
             if [[ "$venv_path" == *"/Pipfile" ]]; then
-                if type "pipenv" > /dev/null && _activate_pipenv; then
+                if _find_venv_manager "pipenv" && _activate_pipenv; then
                     return
                 fi
             elif [[ "$venv_path" == *"/poetry.lock" ]]; then
-                if type "poetry" > /dev/null && _activate_poetry; then
+                if _find_venv_manager "poetry" && _activate_poetry; then
                     return
                 fi
             elif [[ "$venv_path" == *"/uv.lock" ]]; then
@@ -295,15 +296,34 @@ function rmvenv()
 }
 
 
-function _missing_error_message() {
-    local command="$1"
-    printf "${AUTOSWITCH_BOLD}${AUTOSWITCH_RED}"
-    printf "zsh-autoswitch-virtualenv requires '%s' to install this project!\n\n" "$command"
-    printf "${AUTOSWITCH_NORMAL}"
-    printf "If this is already installed but you are still seeing this message, \n"
-    printf "then make sure the ${AUTOSWITCH_BOLD}$command${AUTOSWITCH_NORMAL} command is in your PATH.\n" $command
-    printf "\n"
+function _find_venv_manager() {
+    local python_bin=${AUTOSWITCH_DEFAULT_PYTHON:-python3}
+    local venv_type="$1"
+
+    # Returns >0 if not found, 0 if found
+    "${python_bin}" -m "${venv_type}" --help &>/dev/null
+    return $?
 }
+
+
+function _install_venv_manager_or_quit() {
+    local python_bin=${AUTOSWITCH_DEFAULT_PYTHON:-python3}
+    local venv_type="$1"
+
+    printf "${AUTOSWITCH_PURPLE}'${venv_type}'${AUTOSWITCH_NORMAL} required to activate this project. Install? [y/N]: "
+    read ans
+
+    if [[ "$ans" = "y" || "$ans" == "Y" ]]; then
+        "${python_bin}" -m pip install "${venv_type}"
+    else
+        printf "${AUTOSWITCH_BOLD}${AUTOSWITCH_RED}Aborting! Virtualenv activation cancelled.${AUTOSWITCH_NORMAL}\n"
+        printf "If ${AUTOSWITCH_PURPLE}'${venv_type}'${AUTOSWITCH_NORMAL} is already installed but you are still seeing this message, \n"
+        printf "make sure it is in your PATH.\n\n"
+
+        exit 1
+    fi
+}
+
 
 function randstr()
 {
@@ -323,9 +343,8 @@ function mkvenv()
     params=("${@[@]}")
 
     if [[ "$venv_type" == "pipenv" ]]; then
-        if ! type "pipenv" > /dev/null; then
-            _missing_error_message pipenv
-            return
+        if ! _find_venv_manager "pipenv"; then
+            _install_venv_manager_or_quit pipenv
         fi
         # TODO: detect if this is already installed
         if [[ "$AUTOSWITCH_PIPINSTALL" = "FULL" ]]
@@ -337,26 +356,23 @@ function mkvenv()
         _activate_pipenv
         return
     elif [[ "$venv_type" == "poetry" ]]; then
-        if ! type "poetry" > /dev/null; then
-            _missing_error_message poetry
-            return
+        if ! _find_venv_manager "poetry"; then
+            _install_venv_manager_or_quit poetry
         fi
         # TODO: detect if this is already installed
         "${python_bin}" -m poetry install $params
         _activate_poetry
         return
     elif [[ "$venv_type" == "uv" ]]; then
-        if ! type "uv" > /dev/null; then
-            _missing_error_message uv
-            return
+        if ! _find_venv_manager "uv"; then
+            _install_venv_manager_or_quit uv
         fi
         "${python_bin}" -m uv sync $params
         _activate_uv
         return
     else
-        if ! type "virtualenv" > /dev/null; then
-            _missing_error_message virtualenv
-            return
+        if ! _find_venv_manager "virtualenv"; then
+            _install_venv_manager_or_quit virtualenv
         fi
 
         if [[ -f "$AUTOSWITCH_FILE" ]]; then
@@ -364,14 +380,15 @@ function mkvenv()
         else
             local venv_name="$(basename $PWD)-$(randstr)"
 
-            printf "Creating ${AUTOSWITCH_PURPLE}%s${NONE} virtualenv\n" "$venv_name"
+            printf "Creating ${AUTOSWITCH_PURPLE}%s${AUTOSWITCH_NORMAL} virtualenv\n" "$venv_name"
 
 
             if [[ -n "$AUTOSWITCH_DEFAULT_PYTHON" && ${params[(I)--python*]} -eq 0 ]]; then
+                printf 'Using '
                 printf "${AUTOSWITCH_PURPLE}"
-                printf 'Using $AUTOSWITCH_DEFAULT_PYTHON='
+                printf '$AUTOSWITCH_DEFAULT_PYTHON='
                 printf "$AUTOSWITCH_DEFAULT_PYTHON"
-                printf "${NONE}\n"
+                printf "${AUTOSWITCH_NORMAL}\n"
                 params+="--python=$AUTOSWITCH_DEFAULT_PYTHON"
             fi
 
