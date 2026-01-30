@@ -184,7 +184,7 @@ function check_venv()
 
     if [[ -n "$venv_path" ]]; then
 
-        /usr/bin/stat --version &> /dev/null
+        /usr/bin/stat --version &>/dev/null
         if [[ $? -eq 0 ]]; then   # Linux, or GNU stat
             file_owner="$(/usr/bin/stat -c %u "$venv_path")"
             file_permissions="$(/usr/bin/stat -c %a "$venv_path")"
@@ -309,16 +309,19 @@ function _find_venv_manager() {
 function _install_venv_manager_or_quit() {
     local python_bin=${AUTOSWITCH_DEFAULT_PYTHON:-python3}
     local venv_type="$1"
+    local verbose_flag="$2"
 
     printf "${AUTOSWITCH_PURPLE}'${venv_type}'${AUTOSWITCH_NORMAL} required to activate this project. Install? [y/N]: "
     read ans
 
     if [[ "$ans" = "y" || "$ans" == "Y" ]]; then
-        "${python_bin}" -m pip install "${venv_type}"
+        if [[ ${verbose_flag} -eq 0 ]]; then
+            "${python_bin}" -m pip install "${venv_type}" -qq
+        else
+            "${python_bin}" -m pip install "${venv_type}"
+        fi
     else
         printf "${AUTOSWITCH_BOLD}${AUTOSWITCH_RED}Aborting! Virtualenv activation cancelled.${AUTOSWITCH_NORMAL}\n"
-        printf "If ${AUTOSWITCH_PURPLE}'${venv_type}'${AUTOSWITCH_NORMAL} is already installed but you are still seeing this message, \n"
-        printf "make sure it is in your PATH.\n\n"
 
         return 1
     fi
@@ -344,7 +347,7 @@ function mkvenv()
 
     if [[ "$venv_type" == "pipenv" ]]; then
         if ! _find_venv_manager "pipenv"; then
-            if ! _install_venv_manager_or_quit "pipenv"; then
+            if ! _install_venv_manager_or_quit "pipenv" ${params[(I)--verbose]}; then
                 return 1
             fi
         fi
@@ -359,7 +362,7 @@ function mkvenv()
         return $?
     elif [[ "$venv_type" == "poetry" ]]; then
         if ! _find_venv_manager "poetry"; then
-            if ! _install_venv_manager_or_quit "poetry"; then
+            if ! _install_venv_manager_or_quit "poetry" ${params[(I)--verbose]}; then
                 return 1
             fi
         fi
@@ -369,7 +372,7 @@ function mkvenv()
         return $?
     elif [[ "$venv_type" == "uv" ]]; then
         if ! _find_venv_manager "uv"; then
-            if ! _install_venv_manager_or_quit "uv"; then
+            if ! _install_venv_manager_or_quit "uv" ${params[(I)--verbose]}; then
                 return 1
             fi
         fi
@@ -378,7 +381,7 @@ function mkvenv()
         return $?
     else
         if ! _find_venv_manager "virtualenv"; then
-            if ! _install_venv_manager_or_quit "virtualenv"; then
+            if ! _install_venv_manager_or_quit "virtualenv" ${params[(I)--verbose]}; then
                 return 1
             fi
         fi
@@ -403,9 +406,9 @@ function mkvenv()
             /bin/mkdir -p "$VIRTUAL_ENV_DIR"
 
             if [[ ${params[(I)--verbose]} -eq 0 ]]; then
-                "${python_bin}" -m virtualenv $params "$(_virtual_env_dir "$venv_name")"
+                "${python_bin}" -m virtualenv $params "$(_virtual_env_dir "$venv_name")" -qq
             else
-                "${python_bin}" -m virtualenv $params "$(_virtual_env_dir "$venv_name")" > /dev/null
+                "${python_bin}" -m virtualenv $params "$(_virtual_env_dir "$venv_name")"
             fi
 
             printf "$venv_name\n" > "$AUTOSWITCH_FILE"
@@ -477,7 +480,7 @@ function disable_autoswitch_virtualenv() {
 # This seems important for "instant prompt" zsh themes like powerlevel10k
 function _autoswitch_startup() {
     local python_bin="${AUTOSWITCH_DEFAULT_PYTHON:-python3}"
-    if ! type "${python_bin}" > /dev/null; then
+    if ! type "${python_bin}" >/dev/null; then
         printf "WARNING: python binary '${python_bin}' not found on PATH.\n"
         printf "zsh-autoswitch-virtualenv plugin will be disabled.\n"
     else
