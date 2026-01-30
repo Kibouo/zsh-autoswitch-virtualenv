@@ -16,7 +16,7 @@ function _validated_source() {
         (>&2 printf "AUTOSWITCH WARNING: ")
         (>&2 printf "target virtualenv contains invalid characters\n")
         (>&2 printf "virtualenv activation cancelled\n")
-        return
+        return 1
     else
         source "$target_path"
     fi
@@ -94,7 +94,7 @@ function _maybeworkon() {
         if [[ ! -d "$venv_dir" ]]; then
             printf "Unable to find ${AUTOSWITCH_PURPLE}$venv_name${AUTOSWITCH_NORMAL} virtualenv\n"
             printf "If the issue persists run ${AUTOSWITCH_PURPLE}rmvenv && mkvenv${AUTOSWITCH_NORMAL} in this directory\n"
-            return
+            return 1
         fi
 
         local py_version="$(_python_version "$venv_dir/bin/python")"
@@ -125,7 +125,7 @@ function _check_path()
 
     if [[ -f "${check_dir}/${AUTOSWITCH_FILE}" ]]; then
         printf "${check_dir}/${AUTOSWITCH_FILE}"
-        return
+        return 0
     elif [[ -f "${check_dir}/poetry.lock" ]]; then
         printf "${check_dir}/poetry.lock"
     elif [[ -f "${check_dir}/Pipfile" ]]; then
@@ -135,7 +135,7 @@ function _check_path()
     else
         # Abort search at file system root or HOME directory (latter is a performance optimisation).
         if [[ "$check_dir" = "/" || "$check_dir" = "$HOME" ]]; then
-            return
+            return 1
         fi
         _check_path "$(dirname "$check_dir")"
     fi
@@ -204,25 +204,25 @@ function check_venv()
         else
             if [[ "$venv_path" == *"/Pipfile" ]]; then
                 if _find_venv_manager "pipenv" && _activate_pipenv; then
-                    return
+                    return 0
                 fi
             elif [[ "$venv_path" == *"/poetry.lock" ]]; then
                 if _find_venv_manager "poetry" && _activate_poetry; then
-                    return
+                    return 0
                 fi
             elif [[ "$venv_path" == *"/uv.lock" ]]; then
                 local uv_venv_path="$(dirname "$venv_path")/.venv"
                 _maybeworkon "$uv_venv_path" "uv"
-                return
+                return 0
             # standard use case: $venv_path is a file containing a virtualenv name
             elif [[ -f "$venv_path" ]]; then
                 local switch_to="$(<"$venv_path")"
                 _maybeworkon "$(_virtual_env_dir "$switch_to")" "virtualenv"
-                return
+                return 0
             # $venv_path actually is itself a virtualenv
             elif [[ -d "$venv_path" ]] && [[ -f "$venv_path/bin/activate" ]]; then
                 _maybeworkon "$venv_path" "virtualenv"
-                return
+                return 0
             fi
         fi
     fi
@@ -320,7 +320,7 @@ function _install_venv_manager_or_quit() {
         printf "If ${AUTOSWITCH_PURPLE}'${venv_type}'${AUTOSWITCH_NORMAL} is already installed but you are still seeing this message, \n"
         printf "make sure it is in your PATH.\n\n"
 
-        exit 1
+        return 1
     fi
 }
 
@@ -344,7 +344,9 @@ function mkvenv()
 
     if [[ "$venv_type" == "pipenv" ]]; then
         if ! _find_venv_manager "pipenv"; then
-            _install_venv_manager_or_quit pipenv
+            if ! _install_venv_manager_or_quit "pipenv"; then
+                return 1
+            fi
         fi
         # TODO: detect if this is already installed
         if [[ "$AUTOSWITCH_PIPINSTALL" = "FULL" ]]
@@ -354,25 +356,31 @@ function mkvenv()
             "${python_bin}" -m pipenv install --dev --editable . $params
         fi
         _activate_pipenv
-        return
+        return $?
     elif [[ "$venv_type" == "poetry" ]]; then
         if ! _find_venv_manager "poetry"; then
-            _install_venv_manager_or_quit poetry
+            if ! _install_venv_manager_or_quit "poetry"; then
+                return 1
+            fi
         fi
         # TODO: detect if this is already installed
         "${python_bin}" -m poetry install $params
         _activate_poetry
-        return
+        return $?
     elif [[ "$venv_type" == "uv" ]]; then
         if ! _find_venv_manager "uv"; then
-            _install_venv_manager_or_quit uv
+            if ! _install_venv_manager_or_quit "uv"; then
+                return 1
+            fi
         fi
         "${python_bin}" -m uv sync $params
         _activate_uv
-        return
+        return $?
     else
         if ! _find_venv_manager "virtualenv"; then
-            _install_venv_manager_or_quit virtualenv
+            if ! _install_venv_manager_or_quit "virtualenv"; then
+                return 1
+            fi
         fi
 
         if [[ -f "$AUTOSWITCH_FILE" ]]; then
